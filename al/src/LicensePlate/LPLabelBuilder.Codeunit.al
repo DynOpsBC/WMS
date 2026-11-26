@@ -180,7 +180,9 @@ codeunit 72302 "DOPSWHS LP Label Builder"
                 LotText += StrSubstNo('+%1 DİĞER SATIR', LineCount - 1);
             end;
         end else
-            QtyText := 'BOŞ TAŞIYICI';
+            // DKC (26 Kas 2026): kutuları üstüne konmuş palet boş değildir.
+            if not ChildBoxSummary(LP, ItemText, LotText, QtyText) then
+                QtyText := 'BOŞ TAŞIYICI';
 
         Canvas.Init();
         Kind := KindWord(LP);
@@ -387,6 +389,8 @@ codeunit 72302 "DOPSWHS LP Label Builder"
         MixedUom: Boolean;
         Hidden: Integer;
         LineText: Text;
+        SummaryItem: Text;
+        SummaryLot: Text;
     begin
         Clear(Lines);
         Content.SetRange("LP No.", LP."No.");
@@ -429,9 +433,17 @@ codeunit 72302 "DOPSWHS LP Label Builder"
         if Hidden > 0 then
             Lines.Add(StrSubstNo('+%1 satır daha', Hidden));
 
-        if (ItemCount = 0) and (ChildCount = 0) then
-            TotalsText := 'BOŞ TAŞIYICI'
-        else begin
+        if (ItemCount = 0) and (ChildCount = 0) then begin
+            if ChildBoxSummary(LP, SummaryItem, SummaryLot, TotalsText) then begin
+                if IncludeContents then begin
+                    if SummaryItem <> '' then
+                        Lines.Add(SummaryItem);
+                    if SummaryLot <> '' then
+                        Lines.Add(SummaryLot);
+                end;
+            end else
+                TotalsText := 'BOŞ TAŞIYICI';
+        end else begin
             if ChildCount > 0 then
                 TotalsText := StrSubstNo('%1 KAP', ChildCount);
             if ItemCount > 0 then begin
@@ -445,6 +457,69 @@ codeunit 72302 "DOPSWHS LP Label Builder"
         end;
         if LP."Weight kg" <> 0 then
             TotalsText += StrSubstNo(' · %1 kg', LP."Weight kg");
+    end;
+
+    /// <summary>
+    /// Üstüne kutu LP'leri konmuş palet ("Parent LP No." ile bağlı kutular): ürün, lot ve
+    /// "3 KUTU · 300 ADET" özeti. Kutusu yoksa false.
+    /// </summary>
+    local procedure ChildBoxSummary(var LP: Record "DOPSWHS LP Header"; var ItemText: Text; var LotText: Text; var QtyText: Text): Boolean
+    var
+        Child: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        Lots: List of [Text];
+        FirstItem: Code[20];
+        Uom: Code[10];
+        Boxes: Integer;
+        Total: Decimal;
+        MixedItem: Boolean;
+        MixedUom: Boolean;
+    begin
+        Child.SetRange("Parent LP No.", LP."No.");
+        if not Child.FindSet() then
+            exit(false);
+        repeat
+            Boxes += 1;
+            Line.SetRange("LP No.", Child."No.");
+            Line.SetFilter("Item No.", '<>%1', '');
+            if Line.FindSet() then
+                repeat
+                    if FirstItem = '' then
+                        FirstItem := Line."Item No."
+                    else
+                        if FirstItem <> Line."Item No." then
+                            MixedItem := true;
+                    if Uom = '' then
+                        Uom := Line."Unit of Measure"
+                    else
+                        if Uom <> Line."Unit of Measure" then
+                            MixedUom := true;
+                    Total += Line.Quantity;
+                    if (Line."Lot No." <> '') and not Lots.Contains(Line."Lot No.") then
+                        Lots.Add(Line."Lot No.");
+                until Line.Next() = 0;
+        until Child.Next() = 0;
+        if MixedItem then
+            ItemText := 'KARIŞIK ÜRÜN'
+        else
+            if FirstItem <> '' then begin
+                ItemText := FirstItem;
+                if Item.Get(FirstItem) then
+                    ItemText += '  ' + Item.Description;
+            end;
+        case Lots.Count() of
+            0:
+                LotText := '';
+            1:
+                LotText := 'LOT: ' + Lots.Get(1);
+            else
+                LotText := StrSubstNo('%1 LOT', Lots.Count());
+        end;
+        QtyText := StrSubstNo('%1 KUTU', Boxes);
+        if (Total <> 0) and not MixedUom then
+            QtyText += StrSubstNo(' · %1 %2', Total, Uom);
+        exit(true);
     end;
 
     local procedure ParentKindSuffix(ParentLpNo: Code[20]): Text

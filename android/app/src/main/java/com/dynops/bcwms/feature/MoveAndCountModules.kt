@@ -110,6 +110,8 @@ fun AdHocMoveModule() {
     var binLps by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lpLinesComplete by remember { mutableStateOf(false) }
+    // DKC (26 Kas 2026): palet okutulunca üstündeki kutular görünür ve palet tek seferde taşınır.
+    var palletBoxes by remember { mutableStateOf<List<PalletBoxRow>>(emptyList()) }
     var target by remember { mutableStateOf("") }
     var targetIsLp by remember { mutableStateOf<Boolean?>(null) }
     var targetLpBin by remember { mutableStateOf("") }
@@ -132,7 +134,7 @@ fun AdHocMoveModule() {
     // Son başarılı hareketin kalıcı özeti — PASS sonrası ekranda kart olarak durur.
     var lastMove by remember { mutableStateOf<List<String>?>(null) }
 
-    fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); lpLinesComplete = false; target = ""; targetIsLp = null; targetLpBin = ""; sourceLpLocation = ""; sourceLpBin = "" }
+    fun resetLpFlow() { palletBoxes = emptyList(); fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); lpLinesComplete = false; target = ""; targetIsLp = null; targetLpBin = ""; sourceLpLocation = ""; sourceLpBin = "" }
 
     fun invalidateAvailableLots() {
         lotLookupRequestId += 1
@@ -206,6 +208,7 @@ fun AdHocMoveModule() {
         if (t.isBlank()) return
         scope.launch {
             busy = true; status = "LP içeriği alınıyor..."; lpLinesComplete = false
+            palletBoxes = emptyList()
             lpNo = ""; lpLines = emptyList(); target = ""; targetIsLp = null; targetLpBin = ""
             val safeNo = t.replace("'", "''")
             val h = BcApi.get(context, "licensePlates('$safeNo')")
@@ -237,12 +240,39 @@ fun AdHocMoveModule() {
                 status = "HATA: LP satırlarının tamamı alınamadı$http. Yenileyip tekrar deneyin."
                 return@launch
             }
+            // Palet: ürün kutularda durur. Kutuları ve içeriklerini de getir.
+            var boxes = emptyList<PalletBoxRow>()
+            if (l.rows.isEmpty()) {
+                val children = BcApi.getAllPages(context, "licensePlates?\$filter=parentLpNo eq '$safeNo'&\$select=no,binCode&\$orderby=no")
+                if (!children.complete) {
+                    busy = false; lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
+                    status = "HATA: Paletin kutuları alınamadı. Yenileyip tekrar deneyin."
+                    return@launch
+                }
+                val childNos = children.rows.map { it.optString("no") }.filter { it.isNotBlank() }
+                val childLines = mutableListOf<JSONObject>()
+                for (chunk in childNos.chunked(15)) {
+                    val filter = chunk.joinToString(" or ") { "lpNo eq '${it.replace("'", "''")}'" }
+                    val cl = BcApi.getAllPages(context, "licensePlateLines?\$filter=$filter&\$orderby=lpNo,lineNo")
+                    if (!cl.complete) {
+                        busy = false; lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
+                        status = "HATA: Kutu içerikleri alınamadı. Yenileyip tekrar deneyin."
+                        return@launch
+                    }
+                    childLines += cl.rows
+                }
+                boxes = palletBoxRows(childNos, childLines)
+            }
+            palletBoxes = boxes
             lpLines = l.rows
             lpLinesComplete = true
             lpNo = t
             busy = false
-            status = if (lpLines.isEmpty()) "⚠️ LP boş görünüyor — yine de taşınabilir"
-                else "TAMAM: $t içinde ${lpLines.size} satır"
+            status = when {
+                boxes.isNotEmpty() -> "TAMAM: $t paleti · " + palletBoxSummary(boxes)
+                lpLines.isEmpty() -> "⚠️ LP boş görünüyor — yine de taşınabilir"
+                else -> "TAMAM: $t içinde ${lpLines.size} satır"
+            }
         }
     }
 
@@ -260,6 +290,7 @@ fun AdHocMoveModule() {
         qty = "1"
         lpNo = routedLpNo
         lpLines = emptyList()
+        palletBoxes = emptyList()
         lpLinesComplete = false
         target = ""
         targetIsLp = null
@@ -341,6 +372,11 @@ fun AdHocMoveModule() {
         }
         scope.launch {
             busy = true; status = "Hareket gönderiliyor..."
+            if (targetIsLp == true && palletBoxes.isNotEmpty()) {
+                busy = false
+                status = "HATA: Palet başka bir LP'nin içine aktarılamaz. Hedef olarak raf okutun."
+                return@launch
+            }
             if (targetIsLp == true) {
                 if (targetLpBin.isBlank() || !targetLpBin.equals(fromBin.trim(), ignoreCase = true)) {
                     busy = false
@@ -399,9 +435,11 @@ fun AdHocMoveModule() {
                         "LP konumunu yenileyip doğrulayın."
                     return@launch
                 }
-                status = "TAMAM: LP $lpNo ve stok içeriği atomik olarak $target rafına taşındı"
+                status = if (palletBoxes.isNotEmpty()) "TAMAM: $lpNo paleti ${palletBoxes.size} kutusuyla $target rafına taşındı"
+                    else "TAMAM: LP $lpNo ve stok içeriği atomik olarak $target rafına taşındı"
                 lastMove = buildList {
                     add("🧺 $lpNo · 📍 ${fromBin.trim()} → 📍 $target")
+                    palletBoxes.forEach { b -> add("• ${b.lpNo} · ${b.text}") }
                     lpLines.forEach { ln ->
                         add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
                             (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
@@ -506,10 +544,10 @@ fun AdHocMoveModule() {
             // kaynak raf sorulmaz. Operatör LP etiketini, sonra hedef rafı okutur.
             val lpFirst = isDkcFlavor()
             if (lpFirst) {
-                ScanField(if (lpLines.isEmpty()) "1) LP etiketini okutun" else "LP", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                ScanField(if (lpLines.isEmpty() && palletBoxes.isEmpty()) "1) LP etiketini okutun" else "LP", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
                     loadLp(BarcodeIntentResolver.resolve(it).value)
                 })
-                if (lpNo.isNotBlank() && lpLines.isEmpty()) {
+                if (lpNo.isNotBlank() && lpLines.isEmpty() && palletBoxes.isEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(
                         enabled = !busy,
@@ -587,7 +625,21 @@ fun AdHocMoveModule() {
             }
             }
             // 3) İçerik (sistem gösterir)
-            if (lpLines.isNotEmpty()) {
+            if (lpLines.isNotEmpty() || palletBoxes.isNotEmpty()) {
+                if (palletBoxes.isNotEmpty()) {
+                    Text("Palet · " + palletBoxSummary(palletBoxes), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    palletBoxes.forEach { b ->
+                        Card(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                            Column(Modifier.padding(10.dp)) {
+                                Text("📦 ${b.lpNo}", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                Text(b.text, fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Hedef rafı okutun; palet bütün kutularıyla birlikte taşınır.", fontSize = 12.sp, color = Color.Gray)
+                } else
                 Text((if (isDkcFlavor()) "LP içeriği" else "3) LP içeriği") + " (${lpLines.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Spacer(Modifier.height(4.dp))
                 lpLines.forEach { ln ->
@@ -627,6 +679,7 @@ fun AdHocMoveModule() {
                         when {
                             busy -> "Gönderiliyor..."
                             targetIsLp == true -> "✅ İçeriği $target LP'sine Aktar"
+                            targetIsLp == false && palletBoxes.isNotEmpty() -> "✅ Paleti $target Rafına Taşı"
                             targetIsLp == false -> "✅ LP'yi $target Rafına Taşı"
                             else -> "✅ Hareketi Onayla"
                         },
@@ -3672,3 +3725,29 @@ fun ComingSoonScreen(title: String, note: String) {
         }
     }
 }
+
+
+/** Paletin üstündeki bir kutu ve içeriği ("7.62MM ÇKRDK × 100 · Lot L1"). */
+internal data class PalletBoxRow(val lpNo: String, val text: String, val quantity: Double, val unit: String)
+
+/** Kutu LP'lerini içerik satırlarıyla eşler; içeriği okunamayan kutu "içerik yok" görünür. */
+internal fun palletBoxRows(childNos: List<String>, lines: List<JSONObject>): List<PalletBoxRow> = childNos.map { no ->
+    val own = lines.filter { it.optString("lpNo").equals(no, ignoreCase = true) && it.optString("itemNo").isNotBlank() }
+    val qty = own.sumOf { it.optDouble("quantity", 0.0) }
+    val units = own.map { it.optString("unitOfMeasure").ifBlank { it.optString("unitOfMeasureCode") } }.filter { it.isNotBlank() && it != "null" }.distinct()
+    val text = if (own.isEmpty()) "içerik yok" else own.joinToString(" · ") { ln ->
+        "${ln.optString("itemNo")} × ${palletQty(ln.optDouble("quantity", 0.0))}" +
+            (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: "")
+    }
+    PalletBoxRow(no, text, qty, units.singleOrNull().orEmpty())
+}
+
+/** "3 kutu · 300 ADET" (birimler karışıksa yalnız kutu sayısı). */
+internal fun palletBoxSummary(boxes: List<PalletBoxRow>): String {
+    val units = boxes.map { it.unit }.filter { it.isNotBlank() }.distinct()
+    val total = boxes.sumOf { it.quantity }
+    return "${boxes.size} kutu" + if (units.size == 1 && total > 0.0) " · ${palletQty(total)} ${units[0]}" else ""
+}
+
+private fun palletQty(value: Double): String =
+    java.math.BigDecimal.valueOf(value).setScale(3, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')
