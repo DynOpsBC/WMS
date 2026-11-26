@@ -49,6 +49,12 @@ internal fun receiptAttachLinesBody(lpNo: String, lineNos: List<Int>): String =
         put("lineNosJson", org.json.JSONArray(lineNos).toString())
     }.toString()
 
+/**
+ * Element4 (26 Kas 2026): bölüm kullanıcıları (Hırdavat Depo, Sac-Lazer…) ortak çalışır;
+ * mal kabul listesi "Tümü" ile açılır, yoksa başkasına atanmış belge ve tedarikçisi görünmez.
+ */
+internal fun receiptListShowsAllByDefault(flavor: String): Boolean = flavor.equals("kitoko", ignoreCase = true)
+
 /** Belge kartında tedarikçi ve sipariş: "Tedarikçi: ÖZ METAL · Sipariş: 106007". */
 internal fun receiptVendorLine(vendorName: String, sourceNo: String): String {
     val vendor = vendorName.trim()
@@ -122,7 +128,7 @@ private fun WhseReceiptTab() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
-    var showAll by remember { mutableStateOf(false) }
+    var showAll by remember { mutableStateOf(receiptListShowsAllByDefault(com.dynops.bcwms.BuildConfig.FLAVOR)) }
 
     fun load() {
         scope.launch {
