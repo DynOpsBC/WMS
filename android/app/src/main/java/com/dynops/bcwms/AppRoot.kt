@@ -298,6 +298,9 @@ internal fun operatorHomeScreens(flavor: String, includeAdminTestTools: Boolean 
             hidden.remove(Screen.PostingTest)
         }
         if (!flavor.equals("emu", ignoreCase = true)) hidden += setOf(Screen.HierarchicalLP, Screen.ProductionOutput)
+        // DKC (26 Kas 2026): bileşen terminalden tüketilmez; BC çıktı bildiriminde
+        // toplanan bileşeni çıktı oranında tüketir. Eski "Üretim" (sarfiyat) ekranı gizli.
+        else hidden += Screen.Production
         return Screen.entries.toSet() - hidden
     }
     return Screen.entries.toSet() - setOf(Screen.Home, Screen.HierarchicalLP, Screen.ProductionOutput)

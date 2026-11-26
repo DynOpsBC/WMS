@@ -92,6 +92,8 @@ internal fun scannedCode(raw: String): String =
 internal fun OutputPalletSheet(
     orderNo: String,
     lineNo: Int,
+    /** "Tüm LP'leri Palete Koy": kutuların hepsi seçili gelir, operatör çıkarabilir. */
+    selectAll: Boolean = false,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -115,7 +117,7 @@ internal fun OutputPalletSheet(
         // En son oluşturulan kutu en üstte. Hiçbiri seçili gelmez: operatör palete
         // koyacaklarını işaretler (ya da "Tümü").
         boxes = list.sortedByDescending { it.lpNo }
-        selected = emptySet()
+        selected = if (selectAll) list.map { it.lpNo }.toSet() else emptySet()
         boxesLoaded = true
         if (list.isEmpty()) status = "Palete konacak kutu yok. Önce LP'ye dokunup kutuları oluşturun."
     }

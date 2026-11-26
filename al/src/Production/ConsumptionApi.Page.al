@@ -36,6 +36,7 @@ page 72222 "DOPSWHS Consumption API"
                 // miktarla sınırlar; terminal "tüketebileceğiniz"i buradan hesaplar.
                 field(qtyPicked; Rec."Qty. Picked") { Caption = 'qtyPicked'; Editable = false; }
                 field(actConsumptionQty; Rec."Act. Consumption (Qty)") { Caption = 'actConsumptionQty'; Editable = false; }
+                field(flushingMethod; Rec."Flushing Method") { Caption = 'flushingMethod'; Editable = false; }
             }
         }
     }

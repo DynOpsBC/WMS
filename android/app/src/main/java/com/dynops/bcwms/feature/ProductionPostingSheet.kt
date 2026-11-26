@@ -116,7 +116,7 @@ internal fun ProductionPostingSheet(
                 } else {
                     val complete = answer.getBoolean("completed")
                     if (persist(pending.copy(phase = if (complete) "posted" else "prepared", result = text))) {
-                        status = if (complete) "TAMAM: ${receiptLabelQtyText(answer.getDouble("quantity"), unit)} deftere nakledildi. Etiketi basabilirsiniz."
+                        status = if (complete) "TAMAM: ${receiptLabelQtyText(answer.getDouble("quantity"), unit)} deftere nakledildi; bileşenler bu çıktı kadar tüketildi. Etiketi basabilirsiniz."
                             else "Bildirim hazır. ${answer.optString("lotNo").takeIf { it.isNotBlank() }?.let { "BC lotu: $it." }.orEmpty()} Deftere nakil yapılıyor…"
                         if (!complete && action == "prepare") chainPost = true
                         if (complete) {
@@ -209,12 +209,9 @@ internal fun ProductionPostingSheet(
                     FilledTonalButton(enabled = !busy && !blocked && result != null, modifier = Modifier.fillMaxWidth(), onClick = {
                         result?.let { onLp(OutputLot(it.getString("lotNo"), it.getDouble("quantityBase"), it.getString("baseUnitOfMeasure"), it.getString("postingDate"))) }
                     }) { Text("Çıktıyı LP'ye Koy") }
-                    // Önce üret, sonra tüket: çıktıdan sonra emir ekranındaki Sarfiyat
-                    // bölümü ne kadar tüketilebileceğini gösterir.
                     OutlinedButton(enabled = !busy && !blocked, modifier = Modifier.fillMaxWidth(), onClick = {
                         if (store.clear()) { onDismiss() } else { blocked = true; status = "HATA: Cihazdaki bildirim kapatılamadı." }
-                    }) { Text("Sarfiyata Geç") }
-                    Text("Bildirim kapanır; emir ekranında bu çıktı için ne kadar bileşen tüketebileceğiniz görünür.", style = MaterialTheme.typography.bodySmall)
+                    }) { Text("Emre Dön") }
                 }
             }
             if (current.phase in setOf("prepare", "prepared", "posting")) TextButton(enabled = !busy && !blocked, onClick = { send("cancelOutput") }) { Text("Bildirimi İptal Et / Miktarı Değiştir") }

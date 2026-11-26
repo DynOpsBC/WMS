@@ -16,7 +16,42 @@ internal data class OutputLot(
     val unit: String,
     /** En son çıktı tarihi (yyyy-MM-dd). */
     val lastDate: String,
+    /** Tek bir çıktı bildiriminin madde hareketi (0 = lot toplamı). */
+    val entryNo: Int = 0,
 )
+
+/**
+ * DKC (26 Kas 2026): "ne ürettiysem o gelsin" — her çıktı bildirimi ayrı satır.
+ * Aynı lota 100 + 100 bildirilince iki ayrı 100'lük satır görünür; LP ve etiket o
+ * satırın miktarıyla açılır. Geri alınan çıktı (eksi hareket) aynı lotun en son
+ * çıktılarından düşülür. En son çıktı en üstte.
+ */
+internal fun productionOutputBatches(entries: List<JSONObject>): List<OutputLot> {
+    val unit = entries.firstNotNullOfOrNull { it.optString("baseUnitOfMeasure").trim().takeIf(String::isNotBlank) }.orEmpty()
+    val positives = entries.filter { it.optDouble("quantity", 0.0) > 0.0 }
+        .sortedByDescending { it.optInt("entryNo") }
+        .map { e -> doubleArrayOf(e.optDouble("quantity", 0.0)) to e }
+    entries.filter { it.optDouble("quantity", 0.0) < 0.0 }.forEach { neg ->
+        var left = -neg.optDouble("quantity", 0.0)
+        val lot = neg.optString("lotNo").trim()
+        for ((qty, e) in positives) {
+            if (left <= 0.000001) break
+            if (e.optString("lotNo").trim() != lot || qty[0] <= 0.0) continue
+            val take = minOf(qty[0], left)
+            qty[0] -= take
+            left -= take
+        }
+    }
+    return positives.filter { it.first[0] > 0.000001 }.map { (qty, e) ->
+        OutputLot(
+            lotNo = e.optString("lotNo").trim(),
+            quantity = java.math.BigDecimal.valueOf(qty[0]).setScale(5, java.math.RoundingMode.HALF_UP).toDouble(),
+            unit = e.optString("baseUnitOfMeasure").trim().ifBlank { unit },
+            lastDate = e.optString("postingDate"),
+            entryNo = e.optInt("entryNo"),
+        )
+    }
+}
 
 /**
  * Çıktı madde hareketlerini lota göre toplar. Geri alınan çıktı eksi miktarla

@@ -5,7 +5,8 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
                   tabledata "Item Journal Template" = ri,
                   tabledata "Item Journal Batch" = ri,
                   tabledata "Item Journal Line" = rimd,
-                  tabledata "Lot No. Information" = ri;
+                  tabledata "Lot No. Information" = ri,
+                  tabledata "Reservation Entry" = rimd;
 
     [CommitBehavior(CommitBehavior::Error)]
     procedure PrepareOutput(var Line: Record "Prod. Order Line"; Quantity: Decimal; PostingDate: Date; BinCode: Code[20]; ExpirationDate: Date; RequestId: Guid): Text
@@ -120,6 +121,7 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
         License: Codeunit "DOPSWHS License Mgmt";
         ExpectedBase: Decimal;
         TotalBase: Decimal;
+        RemainingBeforeBase: Decimal;
     begin
         License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
         Request.LockTable();
@@ -140,6 +142,7 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
         Entry.SetRange("Document No.", Request."Document No.");
         if not Entry.IsEmpty() then
             Error('Bu bildirim belge numarası kullanılmış; işlem yinelenmedi.');
+        RemainingBeforeBase := Line."Remaining Qty. (Base)";
         CreateJournal(Line, Request, Journal);
         ExpectedBase := Journal."Output Quantity (Base)";
         AddTracking(Journal, Request);
@@ -158,6 +161,10 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
             until Entry.Next() = 0;
         if (Request."Item Ledger Entry No." = 0) or (TotalBase <> ExpectedBase) then
             Error('Çıktı madde hareketi doğrulanamadı. Bildirim geri alındı.');
+        // DKC (26 Kas 2026): bileşenler terminalden tüketilmez; toplanıp üretim
+        // gözüne getirilen bileşen, bildirilen çıktı oranında aynı işlemde tüketilir.
+        // Yetmezse çıktı da kaydedilmez (tek işlem).
+        AutoConsumeComponents(Line, Request, ExpectedBase, RemainingBeforeBase);
         Request."Quantity (Base)" := TotalBase;
         Request.Completed := true;
         Request.Modify(true);
@@ -270,6 +277,183 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
         Journal.Insert(true);
     end;
 
+    /// <summary>
+    /// İleri tüketilmeyen her bileşenden, çıktının emre oranı kadar
+    /// tüketim: beklenen miktar × çıktı (temel) ÷ emir miktarı (temel). Emrin son çıktısında
+    /// bileşenin kalanı tüketilir (yuvarlama artığı kalmaz). Toplama zorunlu lokasyonda
+    /// toplanmamış bileşen tüketilmez; lot takipli bileşende lot, lokasyondaki açık giriş
+    /// kayıtlarından ilk giren ilk çıkar sırasıyla dağıtılır.
+    /// </summary>
+    local procedure AutoConsumeComponents(Line: Record "Prod. Order Line"; Request: Record "DOPSWHS Prod Output Request"; OutputBase: Decimal; RemainingBeforeBase: Decimal)
+    var
+        Comp: Record "Prod. Order Component";
+        Journal: Record "Item Journal Line";
+        PostBatch: Codeunit "Item Jnl.-Post Batch";
+        TemplateName: Code[10];
+        BatchName: Code[10];
+        NeedQty: Decimal;
+        NextLineNo: Integer;
+    begin
+        if (OutputBase <= 0) or (Line."Quantity (Base)" <= 0) then
+            exit;
+        Comp.SetRange(Status, Line.Status);
+        Comp.SetRange("Prod. Order No.", Line."Prod. Order No.");
+        Comp.SetRange("Prod. Order Line No.", Line."Line No.");
+        Comp.SetFilter("Item No.", '<>%1', '');
+        // İleri (Forward) tüketilenler emir serbest bırakılınca zaten tüketilmiştir. Geri
+        // (Backward) tüketilenler de burada çıktı oranında tüketilir; emir bitirilirken BC
+        // yalnız eksik kalan kısmı tüketir (gereken − gerçekleşen).
+        Comp.SetFilter("Flushing Method", '<>%1&<>%2', Comp."Flushing Method"::Forward, Comp."Flushing Method"::"Pick + Forward");
+        if not Comp.FindSet() then
+            exit;
+        EnsureConsumptionBatch(Request, TemplateName, BatchName);
+        NextLineNo := 10000;
+        repeat
+            if OutputBase >= RemainingBeforeBase then
+                NeedQty := Comp."Remaining Quantity"
+            else
+                NeedQty := Round(Comp."Expected Quantity" * OutputBase / Line."Quantity (Base)", 0.00001);
+            if NeedQty > Comp."Remaining Quantity" then
+                NeedQty := Comp."Remaining Quantity";
+            if NeedQty > 0 then begin
+                CheckPicked(Comp, NeedQty);
+                AddConsumptionLines(Comp, Request, NeedQty, TemplateName, BatchName, NextLineNo);
+            end;
+        until Comp.Next() = 0;
+        Journal.SetRange("Journal Template Name", TemplateName);
+        Journal.SetRange("Journal Batch Name", BatchName);
+        if not Journal.FindFirst() then
+            exit;
+        PostBatch.SetSuppressCommit(true);
+        PostBatch.Run(Journal);
+    end;
+
+    local procedure CheckPicked(var Comp: Record "Prod. Order Component"; NeedQty: Decimal)
+    var
+        Location: Record Location;
+        Available: Decimal;
+    begin
+        if not Location.Get(Comp."Location Code") then
+            exit;
+        if not (Location."Directed Put-away and Pick" or
+                (Location."Prod. Consump. Whse. Handling" = Location."Prod. Consump. Whse. Handling"::"Warehouse Pick (mandatory)"))
+        then
+            exit;
+        Comp.CalcFields("Act. Consumption (Qty)");
+        Available := Comp."Qty. Picked" - Comp."Act. Consumption (Qty)";
+        if NeedQty > Available then
+            Error(NotPickedErr, Comp."Item No.", NeedQty, Comp."Unit of Measure Code", Available);
+    end;
+
+    local procedure AddConsumptionLines(Comp: Record "Prod. Order Component"; Request: Record "DOPSWHS Prod Output Request"; NeedQty: Decimal; TemplateName: Code[10]; BatchName: Code[10]; var NextLineNo: Integer)
+    var
+        Item: Record Item;
+        Tracking: Record "Item Tracking Code";
+        Entry: Record "Item Ledger Entry";
+        NeedBase: Decimal;
+        TakeBase: Decimal;
+        QtyPerUoM: Decimal;
+    begin
+        QtyPerUoM := Comp."Qty. per Unit of Measure";
+        if QtyPerUoM = 0 then
+            QtyPerUoM := 1;
+        Item.Get(Comp."Item No.");
+        if (Item."Item Tracking Code" = '') or not Tracking.Get(Item."Item Tracking Code") or not Tracking."Lot Specific Tracking" then begin
+            InsertConsumptionLine(Comp, Request, NeedQty, '', TemplateName, BatchName, NextLineNo);
+            exit;
+        end;
+        if Tracking."SN Specific Tracking" then
+            Error(SerialCompErr, Comp."Item No.");
+        NeedBase := Round(NeedQty * QtyPerUoM, 0.00001);
+        Entry.SetCurrentKey("Item No.", Open, "Variant Code", Positive, "Location Code", "Posting Date");
+        Entry.SetRange("Item No.", Comp."Item No.");
+        Entry.SetRange(Open, true);
+        Entry.SetRange("Variant Code", Comp."Variant Code");
+        Entry.SetRange(Positive, true);
+        Entry.SetRange("Location Code", Comp."Location Code");
+        Entry.SetFilter("Lot No.", '<>%1', '');
+        if Entry.FindSet() then
+            repeat
+                TakeBase := Entry."Remaining Quantity";
+                if TakeBase > NeedBase then
+                    TakeBase := NeedBase;
+                if TakeBase > 0 then begin
+                    InsertConsumptionLine(Comp, Request, Round(TakeBase / QtyPerUoM, 0.00001), Entry."Lot No.", TemplateName, BatchName, NextLineNo);
+                    NeedBase -= TakeBase;
+                end;
+            until (Entry.Next() = 0) or (NeedBase <= 0);
+        if NeedBase > 0 then
+            Error(NoLotStockErr, Comp."Item No.", Comp."Location Code", Round(NeedBase / QtyPerUoM, 0.00001), Comp."Unit of Measure Code");
+    end;
+
+    local procedure InsertConsumptionLine(Comp: Record "Prod. Order Component"; Request: Record "DOPSWHS Prod Output Request"; Qty: Decimal; LotNo: Code[50]; TemplateName: Code[10]; BatchName: Code[10]; var NextLineNo: Integer)
+    var
+        Journal: Record "Item Journal Line";
+        TempReservEntry: Record "Reservation Entry" temporary;
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+    begin
+        if Qty <= 0 then
+            exit;
+        Journal.Init();
+        Journal."Journal Template Name" := TemplateName;
+        Journal."Journal Batch Name" := BatchName;
+        Journal."Line No." := NextLineNo;
+        NextLineNo += 10000;
+        Journal.Validate("Posting Date", Request."Posting Date");
+        // Order context before Item No.: validating Item No. first clears the order link.
+        Journal.Validate("Entry Type", Journal."Entry Type"::Consumption);
+        Journal.Validate("Order Type", Journal."Order Type"::Production);
+        Journal.Validate("Order No.", Comp."Prod. Order No.");
+        Journal.Validate("Order Line No.", Comp."Prod. Order Line No.");
+        Journal.Validate("Item No.", Comp."Item No.");
+        Journal.Validate("Prod. Order Comp. Line No.", Comp."Line No.");
+        Journal.Validate("Location Code", Comp."Location Code");
+        if Comp."Bin Code" <> '' then
+            Journal.Validate("Bin Code", Comp."Bin Code");
+        Journal.Validate("Unit of Measure Code", Comp."Unit of Measure Code");
+        Journal.Validate(Quantity, Qty);
+        Journal."Document No." := Request."Document No.";
+        Journal.Insert(true);
+        if LotNo = '' then
+            exit;
+        TempReservEntry."Lot No." := LotNo;
+        CreateReservEntry.CreateReservEntryFor(Database::"Item Journal Line", Journal."Entry Type".AsInteger(),
+            Journal."Journal Template Name", Journal."Journal Batch Name", 0, Journal."Line No.",
+            Journal."Qty. per Unit of Measure", Journal.Quantity, Journal."Quantity (Base)", TempReservEntry);
+        CreateReservEntry.CreateEntry(Journal."Item No.", Journal."Variant Code", Journal."Location Code",
+            Journal.Description, 0D, 0D, 0, Enum::"Reservation Status"::Prospect);
+    end;
+
+    local procedure EnsureConsumptionBatch(Request: Record "DOPSWHS Prod Output Request"; var TemplateName: Code[10]; var BatchName: Code[10])
+    var
+        Template: Record "Item Journal Template";
+        Batch: Record "Item Journal Batch";
+        Journal: Record "Item Journal Line";
+    begin
+        Template.LockTable();
+        if not Template.Get('DOPSCON') then begin
+            Template.Init();
+            Template.Name := 'DOPSCON';
+            Template.Type := Template.Type::Consumption;
+            Template.Description := 'WMS consumption on output';
+            Template.Insert(true);
+        end;
+        Template.TestField(Type, Template.Type::Consumption);
+        Template.TestField(Recurring, false);
+        TemplateName := Template.Name;
+        BatchName := CopyStr(Request."Document No.", 1, 10);
+        if not Batch.Get(TemplateName, BatchName) then begin
+            Batch.Init();
+            Batch."Journal Template Name" := TemplateName;
+            Batch.Name := BatchName;
+            Batch.Insert(true);
+        end;
+        Journal.SetRange("Journal Template Name", TemplateName);
+        Journal.SetRange("Journal Batch Name", BatchName);
+        if not Journal.IsEmpty() then
+            Error('Tüketim günlüğünde bekleyen satır var; işlem yapılmadı.');
+    end;
+
     local procedure AddTracking(Journal: Record "Item Journal Line"; Request: Record "DOPSWHS Prod Output Request")
     var
         Tracking: Record "Reservation Entry";
@@ -309,4 +493,9 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
         Result.WriteTo(TextResult);
         exit(TextResult);
     end;
+
+    var
+        NotPickedErr: Label '%1 bileşeni toplanmamış: bu çıktı için %2 %3 gerekiyor, üretim alanına toplanıp tüketilmemiş %4. Önce bu emrin toplamasını yapın.', Comment = '%1 = Madde, %2 = Gereken, %3 = Birim, %4 = Toplanan';
+        NoLotStockErr: Label '%1 bileşeninin %2 lokasyonunda lotlu stoğu yetmiyor (%3 %4 eksik). Bileşeni toplayıp tekrar deneyin.', Comment = '%1 = Madde, %2 = Lokasyon, %3 = Eksik, %4 = Birim';
+        SerialCompErr: Label '%1 bileşeni seri numarası takipli; otomatik tüketilemez. BC''de elle tüketin.', Comment = '%1 = Madde';
 }
