@@ -90,7 +90,7 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
             Error('Kullanıcı bulunamadı: %1', Username);
         if StrLen(NewPlainPassword) < 4 then
             Error('Şifre en az 4 karakter olmalı.');
-        if (LocalUser."Terminal Code" <> '') or LocalUser."Terminal Admin" then begin
+        if (LocalUser."Terminal Code" <> '') or LocalUser."Terminal Admin" or LocalUser."PIN Login" then begin
             ValidatePin(NewPlainPassword);
             LocalUser."PIN Login" := true;
         end;
@@ -204,6 +204,30 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         LocalUser.Modify(true);
     end;
 
+    /// <summary>A PIN user who may sign in on every terminal (blank terminal code).</summary>
+    procedure SetAllTerminalsPinUser(Username: Code[20]; DisplayName: Text[100]; Pin: Text)
+    var
+        LocalUser: Record "DOPSWHS Local User";
+    begin
+        EnsureCanManageLocalUsers();
+        ValidatePin(Pin);
+        if DisplayName.Trim() = '' then
+            Error('Ad soyad girin.');
+        Register(Username, CopyStr(DisplayName.Trim(), 1, 100), Pin, '', '');
+        LocalUser.Get(Username);
+        if not LocalUser."Terminal Admin" then
+            LocalUser."Terminal Code" := '';
+        LocalUser."PIN Login" := true;
+        LocalUser."PIN Locked Until" := 0DT;
+        LocalUser.Modify(true);
+    end;
+
+    procedure TerminalAllowed(LocalUser: Record "DOPSWHS Local User"; TerminalCode: Code[20]): Boolean
+    begin
+        exit(LocalUser."Terminal Admin" or (LocalUser."Terminal Code" = TerminalCode) or
+            ((LocalUser."Terminal Code" = '') and LocalUser."PIN Login"));
+    end;
+
     procedure CreateTerminalAdmin(DisplayName: Text[100]; Pin: Text)
     var
         LocalUser: Record "DOPSWHS Local User";
@@ -241,7 +265,8 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         LocalUser.LockTable();
         if not LocalUser.Get(Username) then
             exit('{"error":"Kullanıcı veya PIN hatalı."}');
-        if LocalUser.Disabled or ((LocalUser."Terminal Code" <> TerminalCode) and not LocalUser."Terminal Admin") or not LocalUser."PIN Login" then
+        // Element4 (26 Kas 2026): a PIN user without a terminal works on every terminal.
+        if LocalUser.Disabled or not TerminalAllowed(LocalUser, TerminalCode) or not LocalUser."PIN Login" then
             exit('{"error":"Kullanıcı bu terminalde etkin değil. Yöneticinizle görüşün."}');
         if LocalUser."PIN Locked Until" > CurrentDateTime() then
             exit('{"error":"Çok fazla hatalı PIN. 5 dakika sonra tekrar deneyin."}');

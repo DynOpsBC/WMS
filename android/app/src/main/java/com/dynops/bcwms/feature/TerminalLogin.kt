@@ -57,6 +57,8 @@ internal fun terminalUsersPath(terminal: String): String {
 }
 
 internal const val TERMINAL_ADMINS_PATH = "localUsers?\$filter=terminalAdmin eq true and disabled eq false"
+// Element4 (26 Kas 2026): PIN users without a terminal sign in on every terminal (BC 1.14.4.7+).
+internal const val ALL_TERMINAL_USERS_PATH = "localUsers?\$filter=terminalCode eq '' and pinLogin eq true and disabled eq false"
 
 /** BC does not support OR across distinct fields. Both complete lists are required. */
 internal suspend fun loadTerminalUsers(
@@ -66,7 +68,9 @@ internal suspend fun loadTerminalUsers(
     if (terminal.isBlank()) return emptyList()
     val employees = fetch(terminalUsersPath(terminal)) ?: return null
     val managers = fetch(TERMINAL_ADMINS_PATH) ?: return null
-    return (employees + managers)
+    // An older BC has no pinLogin field and rejects the filter; it has no such users either.
+    val everywhere = fetch(ALL_TERMINAL_USERS_PATH).orEmpty()
+    return (employees + everywhere + managers)
         .filter { authorizedTerminalUser(it, it.optString("username"), terminal) }
         .distinctBy { it.optString("username") }
         .sortedBy { it.optString("displayName") }
@@ -75,7 +79,8 @@ internal suspend fun loadTerminalUsers(
 internal fun authorizedTerminalUser(user: JSONObject, username: String, terminal: String): Boolean =
     username.isNotBlank() && terminal.isNotBlank() && user.optString("username") == username &&
         !user.optBoolean("disabled", true) &&
-        (user.optString("terminalCode") == terminal || user.optBoolean("terminalAdmin", false))
+        (user.optString("terminalCode") == terminal || user.optBoolean("terminalAdmin", false) ||
+            (user.optString("terminalCode").isBlank() && user.optBoolean("pinLogin", false)))
 
 internal fun terminalOperatorLabel(user: JSONObject): String =
     user.optString("displayName").ifBlank { user.optString("username") } +

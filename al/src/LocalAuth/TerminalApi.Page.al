@@ -39,6 +39,7 @@ page 72325 "DOPSWHS Terminal API"
         Terminal: Record "DOPSWHS WMS Terminal";
         LocalUser: Record "DOPSWHS Local User";
         Printer: Record "DOPSWHS Printer";
+        Auth: Codeunit "DOPSWHS Local Auth Mgmt";
         Result: JsonObject;
         ResultText: Text;
     begin
@@ -47,8 +48,7 @@ page 72325 "DOPSWHS Terminal API"
         if Terminal.Disabled then
             Error('Terminal devre dışı.');
         LocalUser.Get(username);
-        if LocalUser.Disabled or not LocalUser."PIN Login" or
-           ((LocalUser."Terminal Code" <> Terminal.Code) and not LocalUser."Terminal Admin") then
+        if LocalUser.Disabled or not LocalUser."PIN Login" or not Auth.TerminalAllowed(LocalUser, Terminal.Code) then
             Error('Kullanıcı bu terminalde etkin değil.');
         // Clearing must also work when the old printer was disabled or deleted.
         if printerCode <> '' then begin

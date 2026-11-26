@@ -42,6 +42,24 @@ class TerminalLoginTest {
         assertFalse(authorizedTerminalUser(user, "OP01", "TERM-2"))
         assertFalse(authorizedTerminalUser(user, "OTHER", "TERM-2"))
     }
+    @Test fun `a PIN user without a terminal signs in on every terminal`() {
+        val user = JSONObject().put("username", "OP09").put("disabled", false).put("terminalCode", "").put("pinLogin", true)
+        assertTrue(authorizedTerminalUser(user, "OP09", "ELEMENT-01"))
+        assertTrue(authorizedTerminalUser(user, "OP09", "ELEMENT-02"))
+        user.put("pinLogin", false)
+        assertFalse(authorizedTerminalUser(user, "OP09", "ELEMENT-01"))
+    }
+    @Test fun `operator list merges terminal, all-terminal and manager users and tolerates an older BC`() = kotlinx.coroutines.runBlocking {
+        val bound = JSONObject().put("username", "OP01").put("displayName", "Hırdavat").put("disabled", false).put("terminalCode", "T1")
+        val everywhere = JSONObject().put("username", "OP02").put("displayName", "Boru").put("disabled", false).put("terminalCode", "").put("pinLogin", true)
+        val admin = JSONObject().put("username", "OP03").put("displayName", "Yönetici").put("disabled", false).put("terminalAdmin", true)
+        val all = loadTerminalUsers("T1") { path -> when (path) {
+            terminalUsersPath("T1") -> listOf(bound); ALL_TERMINAL_USERS_PATH -> listOf(everywhere); TERMINAL_ADMINS_PATH -> listOf(admin); else -> null } }
+        assertEquals(listOf("OP02", "OP01", "OP03"), all!!.map { it.optString("username") })
+        val old = loadTerminalUsers("T1") { path -> when (path) {
+            terminalUsersPath("T1") -> listOf(bound); TERMINAL_ADMINS_PATH -> listOf(admin); else -> null } }
+        assertEquals(listOf("OP01", "OP03"), old!!.map { it.optString("username") })
+    }
     @Test fun `operator list includes active managers and escapes the terminal code`() {
         assertEquals("localUsers?\$filter=terminalCode eq 'T%27%27%201' and disabled eq false", terminalUsersPath("T' 1"))
         assertEquals("Merve · Yönetici", terminalOperatorLabel(JSONObject().put("displayName", "Merve").put("terminalAdmin", true)))
@@ -126,10 +144,11 @@ class TerminalLoginTest {
             when (path) {
                 terminalUsersPath("T1") -> listOf(user("U1", "T1"), manager, user("OTHER", "T2"), user("OFF", "T1", disabled = true))
                 TERMINAL_ADMINS_PATH -> listOf(manager, user("M2", "", true))
+                ALL_TERMINAL_USERS_PATH -> emptyList()
                 else -> error("Unexpected query")
             }
         }
-        assertEquals(listOf(terminalUsersPath("T1"), TERMINAL_ADMINS_PATH), paths)
+        assertEquals(listOf(terminalUsersPath("T1"), TERMINAL_ADMINS_PATH, ALL_TERMINAL_USERS_PATH), paths)
         assertEquals(setOf("U1", "M1", "M2"), result!!.map { it.optString("username") }.toSet())
         assertEquals(3, result.size)
     }
