@@ -6,9 +6,9 @@ nasıl kurulacağını, el terminalinden nasıl kullanılacağını ve API sözl
 
 Mimari kararlar: [decisions/transfer-e-despatch-decisions.md](decisions/transfer-e-despatch-decisions.md).
 
-> Durum: AL kodu bu ortamda derlenmedi. Windows AL araç zinciriyle derlenmeli, sandbox'ta
-> (CustomerSandbox / Demo Business Central) aşağıdaki "Kabul senaryoları" bölümüyle
-> doğrulanmalıdır.
+> Durum (27.11.2026): BCWMSApp 1.14.0.4, BCWMSApp Tests, DynOpsEtrans 2.0.0.82, Connector 1.0.0.0 ve
+> e-Dönüşüm test uygulaması hatasız derleniyor. Sandbox'ta (CustomerSandbox / Demo Business Central)
+> aşağıdaki "Kabul senaryoları" henüz çalıştırılmadı; yayından önce çalıştırılmalıdır.
 
 ## 1. Kim ne yapar?
 
