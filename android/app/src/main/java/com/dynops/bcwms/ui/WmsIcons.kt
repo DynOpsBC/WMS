@@ -49,6 +49,7 @@ enum class WmsGlyph {
     PRODUCTION,
     PRODUCTION_OUTPUT,
     SUBCONTRACTING,
+    TRANSFER_SHIP,
     ASSEMBLY,
     QUALITY,
     QUALITY_MANAGEMENT,
@@ -88,6 +89,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Production -> WmsGlyph.PRODUCTION
     Screen.ProductionOutput -> WmsGlyph.PRODUCTION_OUTPUT
     Screen.Subcontracting -> WmsGlyph.SUBCONTRACTING
+    Screen.TransferShip -> WmsGlyph.TRANSFER_SHIP
     Screen.Assembly -> WmsGlyph.ASSEMBLY
     Screen.Quality -> WmsGlyph.QUALITY
     Screen.QualityMgmt -> WmsGlyph.QUALITY_MANAGEMENT
@@ -349,6 +351,20 @@ fun WmsIcon(
                 line(0.76f, 0.35f, 0.66f, 0.45f)
                 thinLine(0.22f, 0.48f, 0.22f, 0.70f)
                 thinLine(0.22f, 0.70f, 0.60f, 0.70f)
+            }
+            WmsGlyph.TRANSFER_SHIP -> {
+                // Depodan depoya giden belge: iki kutu, arada ok ve üstte irsaliye kâğıdı.
+                roundRect(0.06f, 0.48f, 0.26f, 0.30f, fill = true)
+                roundRect(0.06f, 0.48f, 0.26f, 0.30f)
+                roundRect(0.68f, 0.48f, 0.26f, 0.30f, fill = true)
+                roundRect(0.68f, 0.48f, 0.26f, 0.30f)
+                line(0.34f, 0.63f, 0.64f, 0.63f)
+                line(0.64f, 0.63f, 0.56f, 0.55f)
+                line(0.64f, 0.63f, 0.56f, 0.71f)
+                roundRect(0.36f, 0.10f, 0.28f, 0.34f)
+                thinLine(0.42f, 0.20f, 0.58f, 0.20f)
+                thinLine(0.42f, 0.28f, 0.58f, 0.28f)
+                thinLine(0.42f, 0.36f, 0.52f, 0.36f)
             }
             WmsGlyph.ASSEMBLY -> {
                 drawCircle(soft, s * 0.19f, p(0.31f, 0.31f))

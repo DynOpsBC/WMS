@@ -14,4 +14,7 @@ enum 72205 "DOPSWHS IWX Report Usage"
     value(9; Custom3) { Caption = 'Custom 3'; }
     // ELOG: paketleme istasyonunda sipariş tamamlanınca basılan fiş/fatura.
     value(10; PackReceipt) { Caption = 'Pack Receipt'; }
+    // Transfer e-İrsaliye: A4 belge yazıcısı ve 80 mm termal yazıcı.
+    value(11; EDespatch) { Caption = 'E-Despatch (A4)'; }
+    value(12; EDespatchThermal) { Caption = 'E-Despatch (80 mm)'; }
 }

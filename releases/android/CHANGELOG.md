@@ -7,6 +7,39 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## Yayınlanmadı (v1.14.108 adayı) — Transfer Sevk ve e-İrsaliye
+
+**versionCode:** 200108 (build.gradle.kts) · **BC paketleri:** BCWMSApp 1.14.0.4+ · DynOpsEtrans 2.0.0.82 · DynOps WMS e-Despatch Connector 1.0.0.0
+
+> Cihazda denenmedi; APK yalnız CI'da derlendi (lint, birim testleri, assemble). AL paketleri hatasız
+> derleniyor (27.11.2026); sandbox kabul testi henüz yapılmadı. Ayrıntı: [docs/transfer-e-despatch.md](../../docs/transfer-e-despatch.md).
+> BC tarafında WMS Setup → "E-Despatch Requests Enabled" kapalıyken terminalin eski davranışı değişmez.
+
+### Yeni: Transfer Sevk ekranı (Giden → Transfer Sevk)
+
+- **Transfer Emirleri** sekmesi: kaynak lokasyondaki serbest bırakılmış emirler; ürün/GTIN okutarak satır bazında sevk miktarı, lot/seri takibi, kalan miktardan fazlası engellenir.
+- **Yeni Transfer** sekmesi: kaynak/hedef lokasyon (fasoncu veya konsinye rafı dahil), ürün okut, "Oluştur ve Sevk Et". İşlem anahtarıyla çift basışta ikinci transfer oluşmaz.
+- **e-İrsaliyeler** sekmesi: taleplerin durumu (Taslak, Gönderildi, Hata, Sağlayıcı bekleniyor...).
+- "Alıcı ve Taşıma" kartı: eşlemeden gelen alıcı önerisi; Tedarikçi / Müşteri / Kendi şirketim seçimi ve adres; plaka, dorse, şoför, TCKN, nakliyeci, not. Nakliyeci yoksa şoför adı soyadı istenir.
+- Ambar sevkiyatı gerektiren lokasyonda operatör Ambar Sevkiyatı ekranına yönlendirilir.
+
+### Yeni: e-İrsaliye inceleme sayfası
+
+- Sevk veya hareket kaydından sonra açılır: alıcı, VKN/TCKN, alias, teslim adresi, araç bilgisi, satır özeti.
+- Gönderilmemiş belgede değişiklik kaydedilebilir; "Gönder (GİB)" onay sorar; "A4 yazdır" ve "80 mm yazdır".
+- e-Dönüşüm sağlayıcısı yoksa yalnız "Sevk fişi" basılır.
+
+### Değişenler
+
+- Yönlendirilmiş hareket kaydı `registerForWithDespatch` ile yapılır; hedef raf eşlenmişse inceleme sayfası açılır. Eski BC paketinde otomatik olarak `registerFor` kullanılır.
+- Fason İşlemler: sevk sonrası "e-İrsaliyeyi kontrol et, gönder ve yazdır" düğmesi.
+- Yazıcılar: yeni **80 mm** (Termal) yazıcı seçimi; yalnız PDF formatlı yazıcı kabul edilir.
+- Yardım: "Transfer sevk ve e-İrsaliye" konusu.
+
+### Testler
+
+- `TransferShipWorkflowTest` (16 test) bu ortamda Kotlin 2.0.21 + JUnit 4 ile ayrı bir JVM projesinde çalıştırıldı ve geçti. Gradle/Android derlemesi çalıştırılmadı (Android SDK yok).
+
 ## v1.14.107 — BADE + EMU — Yeni ürün, raf ve LP etiketleri — 2026-09-10
 
 **versionCode:** 200107 · **BC paketi:** 1.14.1.35

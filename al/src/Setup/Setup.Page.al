@@ -172,6 +172,18 @@ page 72061 "DOPSWHS Setup"
                     Editable = false;
                 }
             }
+            group(EDespatch)
+            {
+                Caption = 'E-Despatch (e-İrsaliye)';
+                field("EDesp Integration Enabled"; Rec."EDesp Integration Enabled") { ApplicationArea = All; }
+                field("EDesp Default Print Format"; Rec."EDesp Default Print Format") { ApplicationArea = All; }
+                field("EDesp Print Copies"; Rec."EDesp Print Copies") { ApplicationArea = All; }
+                field("EDesp Require Vehicle Info"; Rec."EDesp Require Vehicle Info") { ApplicationArea = All; }
+                field("EDesp Prompt After Register"; Rec."EDesp Prompt After Register") { ApplicationArea = All; }
+                field("EDesp Fallback Report ID"; Rec."EDesp Fallback Report ID") { ApplicationArea = All; }
+                field("Transfer Ship Use In-Transit"; Rec."Transfer Ship Use In-Transit") { ApplicationArea = All; }
+                field("Transfer In-Transit Code"; Rec."Transfer In-Transit Code") { ApplicationArea = All; }
+            }
             group(AzureDirectPrint)
             {
                 Caption = 'Azure Direct Print';

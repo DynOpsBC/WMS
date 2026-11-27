@@ -84,7 +84,7 @@ if (-not $expectedFiles.Contains('app/BCWMS.PrintAgent.exe') -or
 
 $running = Get-Process -Name 'BCWMS.PrintAgent' -ErrorAction SilentlyContinue
 if ($running) {
-    throw 'BCWMS Print Agent çalışıyor. Sistem tepsisi menüsünden Çıkış deyip kurulumu tekrar çalıştırın.'
+    throw 'BCWMS Print Agent çalışıyor. Sistem tepsisi menüsünden Çıkış deyip kurulumu tekrar çalıştırın (ya da paket kökündeki KUR.cmd dosyasını kullanın; çalışan ajanı kendisi kapatır).'
 }
 
 $localPrograms = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Programs'))

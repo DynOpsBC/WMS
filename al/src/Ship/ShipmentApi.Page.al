@@ -71,6 +71,36 @@ page 72093 "DOPSWHS Shipment API"
         ShipmentMgmt.PostShipment(Rec, print, invoice, printerId);
     end;
 
+    /// <summary>
+    /// Posts a warehouse shipment of a transfer order and returns the e-despatch request of the posted transfer
+    /// shipment: {eDespatchRequired, eDespatch}. overridesJson carries receiver, vehicle and driver.
+    /// </summary>
+    [ServiceEnabled]
+    procedure postWithDespatch(print: Boolean; printerId: Code[50]; overridesJson: Text; userId: Code[50]; idempotencyKey: Guid): Text
+    var
+        Request: Record "DOPSWHS EDesp Request";
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+        PostContext: Codeunit "DOPSWHS EDesp Post Context";
+        RequestMgt: Codeunit "DOPSWHS EDesp Request Mgt";
+        Result: JsonObject;
+        ResultText: Text;
+    begin
+        if not RequestMgt.FindByIdempotencyKey(idempotencyKey, Request) then begin
+            PostContext.SetContext(idempotencyKey, userId, overridesJson, '');
+            ShipmentMgmt.PostShipment(Rec, print, false, printerId);
+            PostContext.ClearContext();
+            Commit();
+        end;
+        if RequestMgt.FindByIdempotencyKey(idempotencyKey, Request) then begin
+            RequestMgt.EnsureDraft(Request);
+            Result.Add('eDespatchRequired', Request.Status <> Request.Status::NotRequired);
+            Result.Add('eDespatch', RequestMgt.ToJsonObject(Request));
+        end else
+            Result.Add('eDespatchRequired', false);
+        Result.WriteTo(ResultText);
+        exit(ResultText);
+    end;
+
     [ServiceEnabled]
     procedure createPick(): Code[20]
     var
