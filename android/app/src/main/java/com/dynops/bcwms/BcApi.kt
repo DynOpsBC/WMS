@@ -658,6 +658,13 @@ object BcApi {
         request(context, "PATCH", path, jsonBody)
 
     /**
+     * Uzun süren POST (sevk/kayıt + e-İrsaliye taslağı). Yol doğrudan verilir; tamsayı anahtarlı
+     * varlıklar (ör. eDespatchRequests(12)) tırnaksız kalır. Yazma işlemleri otomatik tekrar edilmez.
+     */
+    suspend fun postLongRunning(context: Context, path: String, jsonBody: String?): ApiResult =
+        request(context, "POST", path, jsonBody, longRunningClient)
+
+    /**
      * Warehouse Pick satırları doğrudan PATCH edilmez. Bu action yerel WMS
      * kullanıcısını sunucuya taşır; BC sahiplik ve lot kontrollerini atomik
      * uygular. Geçici deadlock/throttle yanıtları kısa aralıklarla ve en fazla

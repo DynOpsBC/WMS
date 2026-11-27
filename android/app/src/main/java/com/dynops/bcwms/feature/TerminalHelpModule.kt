@@ -297,6 +297,22 @@ internal val TerminalHelpTopics = listOf(
         target = Screen.Quality,
     ),
     HelpTopic(
+        "transfer-ship", HelpCategory.OUTBOUND, "🚚", "Transfer sevk ve e-İrsaliye",
+        "Başka depoya, fasoncuya veya konsinye müşteriye giden malı sevk eder, e-İrsaliyesini kesersiniz.",
+        listOf(
+            "Transfer Sevk ekranını açın. BC'de hazır transfer emri varsa “Transfer Emirleri”, yoksa “Yeni Transfer” sekmesini seçin.",
+            "Transfer emrini okutun veya listeden seçin. Yeni transferde kaynak ve hedef lokasyonu, fasoncu/konsinye rafını seçin.",
+            "Ürünleri okutun, miktarı ve gerekiyorsa lot/seri numarasını kontrol edin.",
+            "“Alıcı ve Taşıma” kartında alıcıyı kontrol edin. Gerekirse Tedarikçi, Müşteri veya Kendi şirketim seçip değiştirin; plaka ve şoförü girin.",
+            "“Sevk Et”e basın. Stok düşer ve e-İrsaliye taslağı açılır.",
+            "Taslakta alıcıyı, teslim adresini ve aracı son kez kontrol edin; gerekirse değiştirip “Değişiklikleri kaydet” deyin.",
+            "“Gönder (GİB)” ile e-İrsaliyeyi gönderin, sonra “A4 yazdır” veya “80 mm yazdır” ile çıktısını alın.",
+        ),
+        "Bağlantı kesilirse aynı ekranda tekrar “Sevk Et” deyin; işlem anahtarı sayesinde çift sevk oluşmaz. " +
+            "e-İrsaliye hatası sevki geri almaz; “e-İrsaliyeler” sekmesinden tekrar deneyebilirsiniz.",
+        Screen.TransferShip,
+    ),
+    HelpTopic(
         "inquiry-printer", HelpCategory.OTHER, "🔎", "Sorgu, yazıcı ve hata çözme",
         "Stoğa dokunmadan bilgi bakar, yazıcı ayarlar, hataları çözersiniz.",
         listOf(

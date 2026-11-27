@@ -612,6 +612,8 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
     var
         Result: JsonObject;
         EDespatchOutbox: Record "DOPSWHS Subcontract EDesp Out";
+        EDespRequest: Record "DOPSWHS EDesp Request";
+        EDespRequestMgt: Codeunit "DOPSWHS EDesp Request Mgt";
         TextResult: Text;
     begin
         Result.Add('transferOrderNo', TransferNo);
@@ -622,11 +624,33 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         if EDespatchOutbox.FindFirst() then begin
             Result.Add('eDespatchStatus', EDespatchOutbox.Status);
             Result.Add('eDespatchDocumentNo', EDespatchOutbox."Provider Document No.");
-        end else begin
-            Result.Add('eDespatchStatus', 'NOT_QUEUED');
-            Result.Add('eDespatchDocumentNo', '');
-        end;
+            Result.Add('eDespatchRequestEntryNo', 0);
+        end else
+            if EDespRequestMgt.FindForSource("DOPSWHS EDesp Source Type"::TransferShipment, PostedShipmentNo, EDespRequest) then begin
+                Result.Add('eDespatchStatus', LegacyStatusCode(EDespRequest));
+                Result.Add('eDespatchDocumentNo', EDespRequest."Provider Document No.");
+                Result.Add('eDespatchRequestEntryNo', EDespRequest."Entry No.");
+            end else begin
+                Result.Add('eDespatchStatus', 'NOT_QUEUED');
+                Result.Add('eDespatchDocumentNo', '');
+                Result.Add('eDespatchRequestEntryNo', 0);
+            end;
         Result.WriteTo(TextResult);
         exit(TextResult);
+    end;
+
+    local procedure LegacyStatusCode(EDespRequest: Record "DOPSWHS EDesp Request"): Text
+    begin
+        case EDespRequest.Status of
+            EDespRequest.Status::Sent, EDespRequest.Status::Accepted:
+                exit('SUBMITTED');
+            EDespRequest.Status::WaitingAdapter:
+                exit('WAITING_ADAPTER');
+            EDespRequest.Status::Error, EDespRequest.Status::Rejected:
+                exit('ERROR');
+            EDespRequest.Status::NotRequired:
+                exit('NOT_REQUIRED');
+        end;
+        exit('PENDING');
     end;
 }

@@ -626,6 +626,23 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(EnqueuePdf(SourceDoc, ReportId, PrinterId, Copies, Usage, PdfInStream));
     end;
 
+    /// <summary>
+    /// Queues an already rendered PDF (for example the e-despatch PDF of the e-transformation app) to the
+    /// document printer of the usage. Uses the same printer resolution and channels as PrintReport.
+    /// </summary>
+    procedure PrintPdf(SourceDoc: Code[50]; PrinterId: Code[50]; Copies: Integer; Usage: Enum "DOPSWHS IWX Report Usage"; var TempBlob: Codeunit "Temp Blob"): Integer
+    var
+        PdfInStream: InStream;
+    begin
+        if Copies > 10 then
+            Error('A print job cannot exceed 10 copies.');
+        if not TempBlob.HasValue() then
+            Error('The PDF of %1 is empty.', SourceDoc);
+        EnsureDocumentPrinter(PrinterId, Usage);
+        TempBlob.CreateInStream(PdfInStream);
+        exit(EnqueuePdf(SourceDoc, 0, PrinterId, Copies, Usage, PdfInStream));
+    end;
+
     procedure EnsureDocumentPrinter(PrinterId: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage")
     var
         Setup: Record "DOPSWHS Setup";

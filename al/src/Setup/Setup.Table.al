@@ -351,6 +351,61 @@ table 72000 "DOPSWHS Setup"
             Caption = 'Allow Edition Change';
             DataClassification = SystemMetadata;
         }
+        // Transfer e-İrsaliye (ADR-TED-002). The legal document is built by the e-transformation app through
+        // the DynOps WMS e-Despatch Connector; WMS keeps the request and prints.
+        field(490; "EDesp Integration Enabled"; Boolean)
+        {
+            Caption = 'E-Despatch Requests Enabled';
+            DataClassification = CustomerContent;
+            ToolTip = 'Specifies whether transfer shipments, direct transfers, registered movements and subcontracting dispatches from the handheld create e-despatch requests.';
+        }
+        field(491; "EDesp Default Print Format"; Enum "DOPSWHS EDesp Print Format")
+        {
+            Caption = 'Default E-Despatch Print Format';
+            DataClassification = CustomerContent;
+            ToolTip = 'Specifies the format the handheld proposes when the operator prints an e-despatch.';
+        }
+        field(492; "EDesp Print Copies"; Integer)
+        {
+            Caption = 'E-Despatch Print Copies';
+            DataClassification = CustomerContent;
+            InitValue = 1;
+            MinValue = 1;
+            MaxValue = 10;
+            ToolTip = 'Specifies how many copies of an e-despatch are printed.';
+        }
+        field(493; "EDesp Require Vehicle Info"; Boolean)
+        {
+            Caption = 'Require Vehicle Info for E-Despatch';
+            DataClassification = CustomerContent;
+            ToolTip = 'Specifies that the handheld asks for the vehicle plate (and driver when there is no carrier) before an e-despatch is sent.';
+        }
+        field(494; "EDesp Prompt After Register"; Boolean)
+        {
+            Caption = 'Review E-Despatch After Register';
+            DataClassification = CustomerContent;
+            InitValue = true;
+            ToolTip = 'Specifies that the handheld opens the e-despatch review sheet after a movement or transfer that needs an e-despatch.';
+        }
+        field(495; "EDesp Fallback Report ID"; Integer)
+        {
+            Caption = 'Shipment Slip Report ID';
+            DataClassification = CustomerContent;
+            ToolTip = 'Specifies the report printed as a shipment slip when no e-despatch provider is connected. When blank, report 5704 Transfer Shipment is used for transfer shipments.';
+        }
+        field(496; "Transfer Ship Use In-Transit"; Boolean)
+        {
+            Caption = 'Handheld Transfers Use In-Transit';
+            DataClassification = CustomerContent;
+            ToolTip = 'Specifies that transfers created on the handheld use the in-transit location below and are received later. When off, they are direct transfers and need Inventory Setup Direct Transfer Posting = Receipt and Shipment.';
+        }
+        field(497; "Transfer In-Transit Code"; Code[10])
+        {
+            Caption = 'Handheld Transfer In-Transit Code';
+            DataClassification = CustomerContent;
+            TableRelation = Location.Code where("Use As In-Transit" = const(true));
+            ToolTip = 'Specifies the in-transit location of transfers created on the handheld.';
+        }
     }
 
     keys
