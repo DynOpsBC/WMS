@@ -11,8 +11,8 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 **versionCode:** 200108 (build.gradle.kts) · **BC paketleri:** BCWMSApp 1.14.0.4+ · DynOpsEtrans 2.0.0.82 · DynOps WMS e-Despatch Connector 1.0.0.0
 
-> APK üretilmedi, cihazda denenmedi. AL paketleri bu ortamda derlenmedi; Windows AL derlemesi ve
-> sandbox kabul testi gerekir. Ayrıntı: [docs/transfer-e-despatch.md](../../docs/transfer-e-despatch.md).
+> Cihazda denenmedi; APK yalnız CI'da derlendi (lint, birim testleri, assemble). AL paketleri hatasız
+> derleniyor (27.11.2026); sandbox kabul testi henüz yapılmadı. Ayrıntı: [docs/transfer-e-despatch.md](../../docs/transfer-e-despatch.md).
 > BC tarafında WMS Setup → "E-Despatch Requests Enabled" kapalıyken terminalin eski davranışı değişmez.
 
 ### Yeni: Transfer Sevk ekranı (Giden → Transfer Sevk)
