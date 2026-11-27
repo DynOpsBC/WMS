@@ -22,8 +22,13 @@ codeunit 72450 "DOPSWHS Subcontract EDesp Mgt"
     var
         Outbox: Record "DOPSWHS Subcontract EDesp Out";
         Dispatch: Record "DOPSWHS Subcontract Dispatch";
+        RequestMgt: Codeunit "DOPSWHS EDesp Request Mgt";
     begin
         if PreviewMode or (TransferHeader."DOPSWHS Fason Reference No." = '') then
+            exit;
+        // With e-despatch requests enabled, "DOPSWHS EDesp Post Context" creates a generic request instead
+        // (ADR-TED-002). This outbox stays for existing rows and for tenants without the connector.
+        if RequestMgt.IsEnabled() then
             exit;
         Outbox.SetRange("Posted Transfer Shipment No.", TransferShipmentHeader."No.");
         if Outbox.FindFirst() then

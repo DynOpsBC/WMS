@@ -3053,6 +3053,14 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
     var headerLoaded by remember(no) { mutableStateOf(false) }
     var linesComplete by remember(no) { mutableStateOf(false) }
     var myUserId by remember(no) { mutableStateOf("") }
+    // Kayıt sonrası e-İrsaliye gerekiyorsa (ör. fasoncu rafına hareket) inceleme sayfası açılır.
+    var despatchEntryNo by remember(no) { mutableStateOf<Int?>(null) }
+    val registerIdempotencyKey = remember(no) { java.util.UUID.randomUUID().toString() }
+
+    despatchEntryNo?.let { entryNo ->
+        EDespatchReviewSheet(entryNo = entryNo, onClose = { despatchEntryNo = null; onBack() })
+        return
+    }
 
     fun canMutate(): Boolean = headerLoaded && linesComplete &&
         canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)
@@ -3382,16 +3390,36 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                     if (requireMutationAccess()) {
                         scope.launch {
                             busy = true; status = "$no kaydediliyor..."
-                            val r = BcApi.boundActionLongRunning(
+                            var r = BcApi.boundActionLongRunning(
                                 context,
                                 "movements",
                                 no,
-                                "registerFor",
-                                JSONObject().apply { put("userId", myUserId) }.toString(),
+                                "registerForWithDespatch",
+                                JSONObject().apply {
+                                    put("userId", myUserId)
+                                    put("overridesJson", "")
+                                    put("idempotencyKey", registerIdempotencyKey)
+                                }.toString(),
                             )
+                            // e-İrsaliye eylemi olmayan eski BC paketinde klasik kayıt kullanılır.
+                            if (!r.ok && (r.httpCode == 404 || BcApi.errorMessage(r.body).contains("registerForWithDespatch", true))) {
+                                r = BcApi.boundActionLongRunning(
+                                    context,
+                                    "movements",
+                                    no,
+                                    "registerFor",
+                                    JSONObject().apply { put("userId", myUserId) }.toString(),
+                                )
+                            }
                             busy = false
+                            val registered = if (r.ok) parseMovementRegisterResult(r.body) else null
+                            if (registered != null && registered.eDespatchRequired && registered.requestEntryNo > 0) {
+                                despatchEntryNo = registered.requestEntryNo
+                                return@launch
+                            }
                             status = when {
-                                r.ok -> "TAMAM: $no kaydedildi — stok taşındı"
+                                r.ok -> "TAMAM: $no kaydedildi — stok taşındı" +
+                                    (registered?.eDespatch?.let { " · " + eDespatchSummaryLine(it) } ?: "")
                                 BcApi.isAmbiguousMutationFailure(r) ->
                                     "UYARI: Kayıt sonucunun sunucudaki durumu doğrulanamadı. Tekrar kaydetmeyin; güncel durum okunuyor."
                                 else -> directedMovementRegisterError(BcApi.errorMessage(r.body), r.httpCode)

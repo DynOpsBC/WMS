@@ -42,6 +42,8 @@ import org.json.JSONObject
 private const val PREF_NAMESPACE = "bcwms.printer."
 const val PRINTER_USAGE_LABEL = "LpLabel"
 const val PRINTER_USAGE_DOCUMENT = "Document"
+/** e-İrsaliye 80 mm termal kopya: PDF formatında, rulo kâğıtlı yazıcı (Windows yazıcı ajanı üzerinden). */
+const val PRINTER_USAGE_THERMAL = "Thermal"
 
 fun getDefaultPrinter(context: Context, usage: String = PRINTER_USAGE_LABEL): String {
     return context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
@@ -91,6 +93,7 @@ fun PrintersModule() {
     var loading by remember { mutableStateOf(false) }
     var defaultLabelCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_LABEL)) }
     var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
+    var defaultThermalCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_THERMAL)) }
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
@@ -108,6 +111,7 @@ fun PrintersModule() {
             val stale = listOfNotNull(
                 defaultLabelCode.takeIf { it.isNotBlank() && it !in codes }?.let { "etiket ($it)" },
                 defaultDocumentCode.takeIf { it.isNotBlank() && it !in codes }?.let { "belge ($it)" },
+                defaultThermalCode.takeIf { it.isNotBlank() && it !in codes }?.let { "80 mm ($it)" },
             )
             status = if (!page.complete) "HATA: Yazıcı listesinin tamamı alınamadı. Windows yazıcı ajanının bağlantısını kontrol edin."
                 else if (rows.isEmpty()) "Henüz eşitlenmiş yazıcı yok. Windows ajanında Yazıcıları Yenile ve Buluta Eşitle'yi çalıştırın."
@@ -240,6 +244,7 @@ fun PrintersModule() {
                 val stationId = row.optString("stationId")
                 val isLabelDefault = defaultLabelCode == code
                 val isDocumentDefault = defaultDocumentCode == code
+                val isThermalDefault = defaultThermalCode == code
                 Card(shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -249,6 +254,10 @@ fun PrintersModule() {
                             if (isDocumentDefault) {
                                 Spacer(Modifier.width(4.dp))
                                 InfoPill("Belge")
+                            }
+                            if (isThermalDefault) {
+                                Spacer(Modifier.width(4.dp))
+                                InfoPill("80 mm")
                             }
                             if (!active) {
                                 Spacer(Modifier.width(4.dp))
@@ -297,6 +306,18 @@ fun PrintersModule() {
                                     }
                                 },
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
+                            OutlinedButton(
+                                onClick = {
+                                    val issue = thermalPrinterSelectionIssue(active, format)
+                                    if (issue == null) {
+                                        setDefaultPrinter(context, code, PRINTER_USAGE_THERMAL)
+                                        defaultThermalCode = code
+                                        status = "TAMAM: $code e-İrsaliye 80 mm yazıcısı olarak seçildi."
+                                    } else {
+                                        status = "UYARI: $code seçilemedi. $issue"
+                                    }
+                                },
+                            ) { Text(if (isThermalDefault) "✓ 80 mm" else "80 mm", fontSize = 12.sp) }
                         }
                         if (!productionCustomer) {
                             Spacer(Modifier.height(6.dp))
@@ -326,5 +347,13 @@ internal fun labelPrinterSelectionIssue(active: Boolean, format: String): String
     !active -> "Yazıcı pasif. Windows yazıcı ajanında etkinleştirip listeyi yenileyin."
     format.trim().uppercase() != "ZPL" ->
         "Etiket seçimi yalnızca ZPL yazıcılarda kullanılabilir; bu yazıcının formatı ${format.ifBlank { "bilinmiyor" }}."
+    else -> null
+}
+
+/** 80 mm e-İrsaliye kopyası PDF olarak basılır; rulo yazıcı ajanda PDF yazıcısı olarak tanımlanır. */
+internal fun thermalPrinterSelectionIssue(active: Boolean, format: String): String? = when {
+    !active -> "Yazıcı pasif. Windows yazıcı ajanında etkinleştirip listeyi yenileyin."
+    format.trim().uppercase() != "PDF" ->
+        "80 mm e-İrsaliye kopyası PDF olarak gönderilir; yazıcıyı ajanda PDF formatıyla tanımlayın (şu an ${format.ifBlank { "bilinmiyor" }})."
     else -> null
 }

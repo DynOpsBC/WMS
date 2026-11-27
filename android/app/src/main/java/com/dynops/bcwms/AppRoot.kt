@@ -79,6 +79,7 @@ enum class Screen(val title: String) {
     Shipping("Sevkiyat"),
     Production("Üretim"),
     Subcontracting("Fason İşlemler"),
+    TransferShip("Transfer Sevk"),
     Assembly("Montaj"),
     DirectedMove("Yönlendirilmiş Hareket"),
     Quality("Kalite Denetimi"),
@@ -202,6 +203,7 @@ fun AppRoot() {
                 Screen.Shipping -> ShippingModule()
                 Screen.Production -> ProductionModule()
                 Screen.Subcontracting -> SubcontractingModule()
+                Screen.TransferShip -> TransferShipModule()
                 Screen.Assembly -> AssemblyModule()
                 Screen.DirectedMove -> DirectedMoveModule()
                 Screen.Quality -> QualityModule()
@@ -312,6 +314,7 @@ private val HomeCategories = listOf(
         HomeTile(Screen.Picking, WmsGlyph.PICKING, "Toplama", "Sipariş ürünlerini raflardan topla"),
         HomeTile(Screen.Packing, WmsGlyph.PACKING, "Paketleme", "Toplanan ürünleri kolilere ayır"),
         HomeTile(Screen.Shipping, WmsGlyph.SHIPPING, "Sevkiyat", "Belgeyi tamamla ve çıkışı kaydet"),
+        HomeTile(Screen.TransferShip, WmsGlyph.TRANSFER_SHIP, "Transfer Sevk", "Depo, fasoncu, konsinye sevki ve e-İrsaliye"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
         HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),

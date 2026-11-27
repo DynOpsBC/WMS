@@ -61,6 +61,18 @@ page 72220 "DOPSWHS Movement API"
         MovementMgmt.RegisterDirectedFor(Rec, userId);
     end;
 
+    /// <summary>
+    /// Registers the movement for the operator and returns the e-despatch request of the registered movement:
+    /// {activityNo, registeredNo, eDespatchRequired, eDespatch}. The existing registerFor stays unchanged.
+    /// </summary>
+    [ServiceEnabled]
+    procedure registerForWithDespatch(userId: Code[50]; overridesJson: Text; idempotencyKey: Guid): Text
+    var
+        EDespMovementMgmt: Codeunit "DOPSWHS EDesp Movement Mgmt";
+    begin
+        exit(EDespMovementMgmt.RegisterWithDespatch(Rec.Type, Rec."No.", userId, overridesJson, idempotencyKey));
+    end;
+
     [ServiceEnabled]
     procedure confirmLine(lineNo: Integer; qtyToHandle: Decimal; lotNo: Code[50]; serialNo: Code[50]; userId: Code[50])
     var

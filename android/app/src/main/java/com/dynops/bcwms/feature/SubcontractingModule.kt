@@ -693,6 +693,14 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
     val lotNos = remember { mutableStateMapOf<String, String>() }
     val serialNos = remember { mutableStateMapOf<String, String>() }
     val bins = remember { mutableStateMapOf<String, String>() }
+    // e-İrsaliye talebi (WMS e-İrsaliye eklentisi açıksa dispatch sonucu döner).
+    var lastDespatchEntryNo by remember { mutableStateOf(0) }
+    var openDespatchEntryNo by remember { mutableStateOf<Int?>(null) }
+
+    openDespatchEntryNo?.let { entryNo ->
+        EDespatchReviewSheet(entryNo = entryNo, onClose = { openDespatchEntryNo = null })
+        return
+    }
 
     fun loadComponents() {
         scope.launch {
@@ -825,6 +833,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
                 val shipment = result?.optString("postedTransferShipmentNo").orEmpty().ifBlank { "kayıtlı irsaliye" }
                 val reference = result?.optString("fasonReferenceNo").orEmpty().ifBlank { operation.optString("prodOrderNo") }
                 val eDespatch = result?.optString("eDespatchStatus").orEmpty().ifBlank { "durum alınamadı" }
+                result?.optInt("eDespatchRequestEntryNo")?.takeIf { it > 0 }?.let { lastDespatchEntryNo = it }
                 posted += "$shipment · Ref $reference · E-İrsaliye $eDespatch"
             }
             loading = false
@@ -867,6 +876,11 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
             TextButton(onClick = { selected.clear() }) { Text("Seçimi kaldır") }
         }
         StatusText(status)
+        if (lastDespatchEntryNo > 0) {
+            OutlinedButton(onClick = { openDespatchEntryNo = lastDespatchEntryNo }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+                Text("e-İrsaliyeyi kontrol et, gönder ve yazdır")
+            }
+        }
         Text("Malzeme satırları (${components.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         components.forEach { line ->
             val key = componentKey(line)

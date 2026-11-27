@@ -57,6 +57,119 @@ paths:
   /companies({companyId})/barcodes:
     get: { summary: List barcode rules, responses: { "200": { description: OK } } }
     post: { summary: Parse barcode, requestBody: { $ref: "#/components/requestBodies/Barcode" }, responses: { "201": { description: Created } } }
+  /companies({companyId})/transferOrders:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    get: { summary: List released transfer orders of a location (transfer e-despatch), responses: { "200": { description: OK } } }
+  /companies({companyId})/transferOrderLines:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    get: { summary: List transfer order lines with outstanding quantity and tracking flags, responses: { "200": { description: OK } } }
+  /companies({companyId})/transferOrders('{no}')/Microsoft.NAV.ship:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Ship a transfer order and open its e-despatch request
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransferShipRequest" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/transferOps('')/Microsoft.NAV.createAndShip:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Create a transfer order from the handheld and ship it
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { requestJson: { type: string, description: "CreateAndShipBody as JSON text" }, userId: { type: string }, idempotencyKey: { type: string, format: uuid } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/transferOps('')/Microsoft.NAV.resolveReceiver:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Receiver proposed by the e-despatch mappings for a target location and bin
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { fromLocationCode: { type: string }, fromBinCode: { type: string }, toLocationCode: { type: string }, toBinCode: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/transferOps('')/Microsoft.NAV.listReceivers:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Search vendors or customers with their addresses
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { receiverType: { type: string, enum: [Vendor, Customer] }, searchText: { type: string }, maxCount: { type: integer } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/transferOps('')/Microsoft.NAV.findByIdempotencyKey:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Result of an earlier ship or createAndShip call
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { idempotencyKey: { type: string, format: uuid } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/inventoryMovements:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    get: { summary: List inventory movements (Invt. Movement), responses: { "200": { description: OK } } }
+  /companies({companyId})/inventoryMovements('{no}')/Microsoft.NAV.registerWithDespatch:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Register an inventory movement and open its e-despatch request
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RegisterWithDespatchRequest" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/movements('{no}')/Microsoft.NAV.registerForWithDespatch:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Register a directed warehouse movement and open its e-despatch request
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RegisterWithDespatchRequest" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/shipments('{no}')/Microsoft.NAV.postWithDespatch:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Post a warehouse shipment of a transfer and open its e-despatch request
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { print: { type: boolean }, printerId: { type: string }, overridesJson: { type: string }, userId: { type: string }, idempotencyKey: { type: string, format: uuid } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequests:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    get: { summary: List e-despatch requests, responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EDespatchRequest" } } } } } }
+  /companies({companyId})/eDespatchRequests({entryNo})/Microsoft.NAV.getDraft:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Request with the provider draft (receiver, addresses, carrier, lines) in providerDraft
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequests({entryNo})/Microsoft.NAV.updateDraft:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Change receiver, carrier or note of an unsent e-despatch
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { changesJson: { type: string, description: "EDespatchChanges as JSON text" } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequests({entryNo})/Microsoft.NAV.send:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Send the e-despatch to the integrator (GIB)
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequests({entryNo})/Microsoft.NAV.print:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Print A4 (0), 80 mm thermal (1) or the shipment slip (2)
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { format: { type: integer, enum: [0, 1, 2] }, printerId: { type: string }, copies: { type: integer } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequests({entryNo})/Microsoft.NAV.refreshStatus:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Read the status from the provider
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequests({entryNo})/Microsoft.NAV.retry:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    post:
+      summary: Build the provider draft again after an error
+      description: Bound action. The response is {"value":"<json text>"}. Writes are never retried automatically; retry with the same idempotencyKey.
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionResult" } } } } }
+  /companies({companyId})/eDespatchRequestLines:
+    servers: [ { url: "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environmentName}/api/dynops/warehouse/v2.0" } ]
+    get: { summary: Lines of handheld bin-move e-despatch requests, responses: { "200": { description: OK } } }
 components:
   securitySchemes:
     bearerAuth:
@@ -178,3 +291,75 @@ components:
         targetType: { type: string }
         targetNo: { type: string }
         parsedFields: { type: object, additionalProperties: true }
+    ActionResult:
+      type: object
+      properties: { value: { type: string, description: JSON text of the action result } }
+    EDespatchChanges:
+      type: object
+      description: Only the fields sent are changed.
+      properties:
+        receiverType: { type: integer, description: "1 own company, 2 vendor, 3 customer (names accepted)" }
+        receiverNo: { type: string }
+        receiverAddressCode: { type: string }
+        purpose: { type: integer, description: "1 inter-location, 2 subcontracting, 3 consignment, 4 other" }
+        toBinCode: { type: string }
+        vehiclePlateNo: { type: string }
+        trailerPlateNo: { type: string }
+        driverFirstName: { type: string }
+        driverFamilyName: { type: string }
+        driverIdentificationNo: { type: string }
+        shippingAgentCode: { type: string }
+        note: { type: string }
+    TransferShipRequest:
+      type: object
+      properties:
+        linesJson: { type: string, description: "JSON text: [{lineNo, quantity, lotNo?, serialNo?}]" }
+        overridesJson: { type: string, description: EDespatchChanges as JSON text }
+        userId: { type: string }
+        idempotencyKey: { type: string, format: uuid }
+    CreateAndShipBody:
+      allOf:
+        - $ref: "#/components/schemas/EDespatchChanges"
+        - type: object
+          properties:
+            fromLocationCode: { type: string }
+            toLocationCode: { type: string }
+            lines:
+              type: array
+              items: { type: object, properties: { itemNo: { type: string }, quantity: { type: number }, unitOfMeasureCode: { type: string }, variantCode: { type: string }, lotNo: { type: string }, serialNo: { type: string }, fromBinCode: { type: string }, lpNo: { type: string } } }
+    RegisterWithDespatchRequest:
+      type: object
+      properties:
+        userId: { type: string }
+        overridesJson: { type: string, description: EDespatchChanges as JSON text }
+        idempotencyKey: { type: string, format: uuid }
+    EDespatchRequest:
+      type: object
+      properties:
+        entryNo: { type: integer }
+        sourceType: { type: integer, description: "0 transfer shipment, 1 direct transfer, 2 registered whse. movement, 3 registered invt. movement, 4 handheld bin move" }
+        sourceNo: { type: string }
+        transferOrderNo: { type: string }
+        locationCode: { type: string }
+        toLocationCode: { type: string }
+        fromBinCode: { type: string }
+        toBinCode: { type: string }
+        receiverType: { type: integer }
+        receiverNo: { type: string }
+        receiverName: { type: string }
+        receiverIdentificationNo: { type: string }
+        receiverAlias: { type: string }
+        receiverRegistered: { type: boolean }
+        deliveryAddress: { type: string }
+        purpose: { type: integer }
+        status: { type: integer, description: "0 pending, 1 draft, 2 sending, 3 sent, 4 accepted, 5 rejected, 6 cancelled, 7 error, 8 waiting for provider, 9 not required" }
+        editable: { type: boolean }
+        eDespatchNo: { type: string }
+        ettn: { type: string }
+        providerStatus: { type: string }
+        lastError: { type: string }
+        skipReason: { type: string }
+        lineCount: { type: integer }
+        totalQuantity: { type: number }
+        printCount: { type: integer }
+        fasonReferenceNo: { type: string }
